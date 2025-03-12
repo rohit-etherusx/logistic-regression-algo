@@ -1,41 +1,55 @@
 import pandas as pd
 import numpy as np
 import joblib
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.metrics import accuracy_score, classification_report
 
 # Load dataset
-data = pd.read_csv("data/default_of_credit_card_clients.csv")
+print("📂 Loading dataset...")
+data = pd.read_csv("data/default of credit card clients.csv")  # Fixed file path
 
-# Drop the first column as it's an index
-data = data.iloc[:, 1:]
+# Remove irrelevant columns
+data = data.iloc[:, 1:]  # Remove ID column
 
-# Extract features and target variable
-X = data.iloc[:, :-1]  # All columns except the last one
-y = data.iloc[:, -1]   # Last column is the target
+# Define features and target
+X = data.iloc[:, :-1]  # All columns except the last (features)
+y = data.iloc[:, -1]   # Last column (target)
 
-# Split data into training and test sets
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+# Handle categorical features
+categorical_features = ["SEX", "EDUCATION", "MARRIAGE"]
+encoder = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
+X_encoded = encoder.fit_transform(X[categorical_features])
 
-# Scale features
+# Replace categorical columns with encoded values
+X = X.drop(columns=categorical_features)
+X = np.hstack((X.values, X_encoded))
+
+# Apply feature scaling
 scaler = StandardScaler()
-X_train_scaled = scaler.fit_transform(X_train)
-X_test_scaled = scaler.transform(X_test)
+X_scaled = scaler.fit_transform(X)
 
-# Train Logistic Regression model
-model = LogisticRegression(max_iter=1000, random_state=42)
-model.fit(X_train_scaled, y_train)
+# Train-Test Split
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
 
-# Model accuracy
-y_pred = model.predict(X_test_scaled)
-accuracy = accuracy_score(y_test, y_pred)
-print(f"Model Accuracy: {accuracy * 100:.2f}%")
+# Logistic Regression Model
+model = LogisticRegression(class_weight="balanced", max_iter=5000, solver="saga", verbose=1, random_state=42)
 
-# Save the model and scaler
+# Training Model
+print("🚀 Training Model...")
+model.fit(X_train, y_train)
+
+# Evaluate model
+y_pred = model.predict(X_test)
+test_acc = accuracy_score(y_test, y_pred)
+print("\n✅ Model Training Complete!")
+print(f"🎯 Final Test Accuracy: {test_acc:.2%}")
+print("\n📜 Classification Report:")
+print(classification_report(y_test, y_pred))
+
+# Save Model, Encoder & Scaler
 joblib.dump(model, "model/logistic_regression_model.pkl")
+joblib.dump(encoder, "model/encoder.pkl")
 joblib.dump(scaler, "model/scaler.pkl")
-joblib.dump(X.columns.tolist(), "model/feature_names.pkl")
-
-print("Training complete! Model and scaler saved.")
+print("💾 Model, Encoder, and Scaler saved successfully!")
