@@ -1,31 +1,38 @@
-import streamlit as st
-import numpy as np
 import joblib
+import numpy as np
+import pandas as pd
+import streamlit as st
 
-# Load model and scaler
+# Load the trained model, scaler, and feature names
 model = joblib.load("model/logistic_regression_model.pkl")
 scaler = joblib.load("model/scaler.pkl")
 feature_names = joblib.load("model/feature_names.pkl")
 
-st.title("Credit Card Default Prediction")
-st.write("Enter values in the correct order, separated by commas.")
+expected_features = len(feature_names)
 
-# User input
-user_input = st.text_area("Input (comma-separated):", "")
+st.title("💳 Credit Card Default Prediction")
+st.write(f"Enter exactly {expected_features} numerical values as a comma-separated list.")
+
+user_input = st.text_input("Input values:", "")
 
 if st.button("Predict"):
     try:
-        input_values = np.array([list(map(float, user_input.split(",")))])
-        if input_values.shape[1] != len(feature_names):
-            st.error(f"Expected {len(feature_names)} values, but got {input_values.shape[1]}.")
+        # Convert input string to list of floats
+        input_list = [float(x.strip()) for x in user_input.split(",")]
+        if len(input_list) != expected_features:
+            st.error(f"Invalid input! Expected {expected_features} features, but got {len(input_list)}.")
         else:
-            input_scaled = scaler.transform(input_values)
-            prediction = model.predict(input_scaled)[0]
-            confidence = model.predict_proba(input_scaled)[0][prediction] * 100
-
-            if prediction == 1:
-                st.error(f"⚠️ Likely to Default (Confidence: {confidence:.2f}%)")
-            else:
-                st.success(f"✅ No Default Expected (Confidence: {confidence:.2f}%)")
-    except:
-        st.error("Invalid input format. Please enter numeric values separated by commas.")
+            # Create DataFrame with the proper feature names
+            input_df = pd.DataFrame([input_list], columns=feature_names)
+            # Scale the input using the same scaler as during training
+            input_scaled = scaler.transform(input_df)
+            # Get prediction probabilities
+            probas = model.predict_proba(input_scaled)[0]
+            # Adjust threshold: here, if probability of default (assumed to be at index 1) > 0.3, predict default.
+            threshold = 0.3
+            prediction = 1 if probas[1] > threshold else 0
+            st.write(f"Probability of Default: {probas[1] * 100:.2f}%")
+            result = "⚠️ Default Expected" if prediction == 1 else "✅ No Default"
+            st.success(f"Prediction: {result}")
+    except Exception as e:
+        st.error(f"Invalid input! Please enter numerical values in a comma-separated format.\nError: {e}")

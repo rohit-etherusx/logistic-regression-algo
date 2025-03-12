@@ -1,55 +1,49 @@
 import pandas as pd
 import numpy as np
 import joblib
-from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report
+from imblearn.over_sampling import SMOTE
 
-# Load dataset
-print("📂 Loading dataset...")
-data = pd.read_csv("data/default of credit card clients.csv")  # Fixed file path
+# Load dataset; note that the CSV file is "default of credit card clients.csv" (without underscore)
+df = pd.read_csv("data/default of credit card clients.csv", skiprows=1)
 
-# Remove irrelevant columns
-data = data.iloc[:, 1:]  # Remove ID column
+# Optionally, rename columns if necessary (here we assume the CSV's columns match expected order)
+# For example, if the first column is an ID, drop it:
+df = df.iloc[:, 1:]
 
-# Define features and target
-X = data.iloc[:, :-1]  # All columns except the last (features)
-y = data.iloc[:, -1]   # Last column (target)
+# Assume that the last column is the target variable (0 = No Default, 1 = Default)
+X = df.iloc[:, :-1]  # All feature columns
+y = df.iloc[:, -1]   # Target
 
-# Handle categorical features
-categorical_features = ["SEX", "EDUCATION", "MARRIAGE"]
-encoder = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
-X_encoded = encoder.fit_transform(X[categorical_features])
+# Split data into training and test sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# Replace categorical columns with encoded values
-X = X.drop(columns=categorical_features)
-X = np.hstack((X.values, X_encoded))
+# Use SMOTE to oversample the minority class
+smote = SMOTE(random_state=42)
+X_train_res, y_train_res = smote.fit_resample(X_train, y_train)
 
 # Apply feature scaling
 scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
+X_train_scaled = scaler.fit_transform(X_train_res)
+X_test_scaled = scaler.transform(X_test)
 
-# Train-Test Split
-X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+# Train logistic regression
+# Here, we increase max_iter to ensure convergence and set C to 10 for less regularization.
+model = LogisticRegression(max_iter=2000, solver='saga', class_weight='balanced', C=10, random_state=42)
+model.fit(X_train_scaled, y_train_res)
 
-# Logistic Regression Model
-model = LogisticRegression(class_weight="balanced", max_iter=5000, solver="saga", verbose=1, random_state=42)
-
-# Training Model
-print("🚀 Training Model...")
-model.fit(X_train, y_train)
-
-# Evaluate model
-y_pred = model.predict(X_test)
-test_acc = accuracy_score(y_test, y_pred)
-print("\n✅ Model Training Complete!")
-print(f"🎯 Final Test Accuracy: {test_acc:.2%}")
-print("\n📜 Classification Report:")
+# Evaluate the model
+y_pred = model.predict(X_test_scaled)
+acc = accuracy_score(y_test, y_pred)
+print(f"✅ Model Training Complete! Accuracy: {acc * 100:.2f}%")
+print("📜 Classification Report:")
 print(classification_report(y_test, y_pred))
 
-# Save Model, Encoder & Scaler
+# Save the trained model, scaler, and feature names
 joblib.dump(model, "model/logistic_regression_model.pkl")
-joblib.dump(encoder, "model/encoder.pkl")
 joblib.dump(scaler, "model/scaler.pkl")
-print("💾 Model, Encoder, and Scaler saved successfully!")
+joblib.dump(X.columns.tolist(), "model/feature_names.pkl")
+print("💾 Model, scaler, and feature names saved successfully!")
